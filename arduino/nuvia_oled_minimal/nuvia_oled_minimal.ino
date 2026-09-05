@@ -85,7 +85,7 @@ void drawHeader() {
   display.setTextSize(1);
   display.setTextColor(SSD1306_BLACK);
   display.setCursor(3, 2);
-  display.print(F("RespTalk"));
+  display.print(F("Nuvia"));
 
   for (int i = 0; i < 3; i++) {
     int16_t sx = 84 + i * 14;
@@ -227,7 +227,7 @@ void setup() {
 
   if (haveDisplay) {
     display.clearDisplay();
-    centerText("RespTalk", 18, 2);
+    centerText("Nuvia", 18, 2);
     centerText("BCAI", 42, 1);
     display.display();
     delay(1200);
@@ -241,7 +241,7 @@ void setup() {
 
   Serial.println(F("Breath detection started..."));
 
-  bluetooth.println(F("RespTalk Bluetooth Started"));
+  bluetooth.println(F("Nuvia Bluetooth Started"));
 }
 
 void loop() {

@@ -89,7 +89,7 @@ void updateLCD(String line2)
   lcd.clear();
 
   lcd.setCursor(0, 0);
-  lcd.print("RespTalk-(BCAI)");
+  lcd.print("Nuvia-(BCAI)");
 
   lcd.setCursor(0, 1);
   lcd.print(line2);
@@ -121,7 +121,7 @@ void setup()
 
   updateLCD(lastWord);
 
-  Serial.println("RespTalk started...");
+  Serial.println("Nuvia started...");
 }
 
 

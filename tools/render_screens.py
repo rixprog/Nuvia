@@ -12,7 +12,7 @@ WORDS = ["FOOD", "WATER", "EMERGENCY", "TOILET", "MEDICINE", "YES", "NO"]
 
 def header(c, pattern, count):
     c.fill_rect(0, 0, W, 11, WHITE)
-    c.text(3, 2, "RespTalk", 1, BLACK)
+    c.text(3, 2, "Nuvia", 1, BLACK)
     for i in range(3):
         sx = 84 + i * 14
         if i < count:

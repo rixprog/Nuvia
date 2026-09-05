@@ -1,5 +1,5 @@
 /*
- * RespTalk (BCAI) - OLED edition
+ * Nuvia (BCAI) - OLED edition
  * =======================================================================
  * Three breaths form a Morse-like pattern that resolves to a word, shown on
  * an SSD1306 OLED and sent over Bluetooth.
@@ -184,7 +184,7 @@ void drawHeader()
   display.setTextSize(1);
   display.setTextColor(SSD1306_BLACK);
   display.setCursor(3, 2);
-  display.print(F("RespTalk"));
+  display.print(F("Nuvia"));
 
   for (uint8_t i = 0; i < 3; i++) {
     int16_t sx = 84 + i * 14;
@@ -463,7 +463,7 @@ void setup()
     Serial.println(addr, HEX);
 
     display.clearDisplay();
-    centerText("RespTalk", 18, 2);
+    centerText("Nuvia", 18, 2);
     centerText("BCAI", 42, 1);
     display.display();
     delay(1200);
@@ -473,9 +473,9 @@ void setup()
     Serial.println(F("No OLED on 0x3C/0x3D - running headless"));
   }
 
-  Serial.println(F("RespTalk started..."));
+  Serial.println(F("Nuvia started..."));
 #if USE_SOFTSERIAL
-  bluetooth.println(F("RespTalk Bluetooth Started"));
+  bluetooth.println(F("Nuvia Bluetooth Started"));
 #endif
 }
 

@@ -152,7 +152,7 @@ function openOnboarding(step = 0) {
 
 function closeOnboarding() {
   document.getElementById("onboarding").hidden = true;
-  localStorage.setItem("resptalk-setup-done", "1");
+  localStorage.setItem("nuvia-setup-done", "1");
 }
 
 function initOnboarding() {
@@ -180,7 +180,7 @@ function initOnboarding() {
   const jump = params.get("obstep");
   if (jump !== null) openOnboarding(Math.max(0, Math.min(2, Number(jump))));
   else if (!params.has("game")
-           && !localStorage.getItem("resptalk-setup-done")) openOnboarding(0);
+           && !localStorage.getItem("nuvia-setup-done")) openOnboarding(0);
 }
 
 window.RespOnboarding = { init: initOnboarding, open: openOnboarding,

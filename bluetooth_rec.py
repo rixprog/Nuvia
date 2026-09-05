@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""RespTalk breath calibration.
+"""Nuvia breath calibration.
 
 Records short and long breaths from the Arduino's raw ADC stream and derives
 the duration threshold that separates them.
 
-Flash arduino/resptalk_raw/resptalk_raw.ino first - that is the sketch that
-streams A0. resptalk_oled sends words, not samples.
+Flash arduino/nuvia_raw/nuvia_raw.ino first - that is the sketch that
+streams A0. nuvia_oled sends words, not samples.
 
   python3.11 bluetooth_rec.py                    # 10 of each
   python3.11 bluetooth_rec.py --samples 15
@@ -207,7 +207,7 @@ def record_breath(sock, breath_type, number, total, seconds):
             print("No ADC data received.")
             if _ignored_lines:
                 print(f"{_ignored_lines} non-numeric lines arrived instead -")
-                print("that looks like resptalk_oled is flashed, not resptalk_raw.")
+                print("that looks like nuvia_oled is flashed, not nuvia_raw.")
             continue
 
         expected = int(SAMPLE_RATE * seconds)

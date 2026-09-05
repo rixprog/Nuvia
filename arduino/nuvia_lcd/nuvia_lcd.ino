@@ -134,7 +134,7 @@ void updateLCD(const char *line2) {
   lcd.clear();
 
   lcd.setCursor(0, 0);
-  lcd.print(F("RespTalk"));
+  lcd.print(F("Nuvia"));
   drawSlots();
 
   if (!strcmp(line2, "******")) {
@@ -186,7 +186,7 @@ void setup() {
     loadGlyph(GLYPH_ALERT, alertGlyph);
 
     lcd.setCursor(0, 0);
-    lcd.print(F("RespTalk-(BCAI)"));
+    lcd.print(F("Nuvia-(BCAI)"));
     lcd.setCursor(4, 1);
     lcd.print(F("starting"));
     delay(1000);
@@ -203,7 +203,7 @@ void setup() {
 
   Serial.println(F("Breath detection started..."));
 
-  bluetooth.println(F("RespTalk Bluetooth Started"));
+  bluetooth.println(F("Nuvia Bluetooth Started"));
 }
 
 void loop() {

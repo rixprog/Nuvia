@@ -1,5 +1,5 @@
 /*
- * RespTalk - raw A0 capture
+ * Nuvia - raw A0 capture
  * -----------------------------------------------------------------------
  * Standalone diagnostic sketch. It reads the analog pin and prints it.
  * Nothing else: no OLED, no comparators, no pattern logic, no buzzer.

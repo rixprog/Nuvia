@@ -1,4 +1,4 @@
-"""Pixel-accurate preview of the RespTalk OLED screens.
+"""Pixel-accurate preview of the Nuvia OLED screens.
 
 Reimplements the Adafruit_GFX primitives the sketch uses, driven by the real
 5x7 font table from the installed library, so the rendered PNG matches what

@@ -8,8 +8,10 @@ sdkconfig.old
 __pycache__/
 *.pyc
 
-# Runtime data
-web/resptalk.db
+# Runtime data. Match by extension: renaming the app once left a
+# stale differently-named database unignored.
+*.db
+*.db-journal
 
 # Recorded breath data. These are real physiological recordings from a
 # person - keep them out of a public repo. Remove these lines if you want

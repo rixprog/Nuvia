@@ -1,63 +1,35 @@
-# breath-control-and-paralysis
+# Nuvia
 
-ESP32 + MPU-6050 rig. The firmware identifies the IMU, configures it and streams
-motion over USB serial as CSV; the host script reads, displays and logs it.
+A breath-driven communication and respiratory-monitoring system for people with
+paralysis.
 
-## Hardware as tested
+Three breaths form a Morse-like pattern that resolves to a word. The device
+shows it, sends it over Bluetooth to a phone or laptop, and records every
+breath so that respiratory effort can be tracked over time.
 
-| | |
+Built for someone who has lost speech and movement but retains breath control.
+
+```
+Breath -> Piezo -> LM324 -> comparators -> ATmega328P -> display + buzzer
+                     |                          |
+                     +-- raw analog (A0)        +-- HC-05 -> web dashboard
+```
+
+| Part | What it is |
 |---|---|
-| Board | ESP32-D0WD-V3 (WROOM-32), CP2102 USB bridge, **26 MHz crystal** |
-| IMU | MPU-6050 at I2C address `0x68` (WHO_AM_I `0x68`) |
-| Port | `/dev/ttyUSB0` @ 115200 |
+| [`arduino/nuvia_lcd`](arduino/nuvia_lcd) | 16x2 LCD build, custom glyphs |
+| [`arduino/nuvia_oled`](arduino/nuvia_oled) | SSD1306 build, live breath meter and icons |
+| [`arduino/nuvia_raw`](arduino/nuvia_raw) | Raw A0 capture, for calibration |
+| [`web/`](web) | Local dashboard: monitor, analytics, training games |
+| [`breath_live.py`](breath_live.py) | Live decoder on the host |
+| [`bluetooth_rec.py`](bluetooth_rec.py) | Calibration over Bluetooth |
 
-Wiring: `VCC -> 3V3`, `GND -> GND`, `SDA -> GPIO21`, `SCL -> GPIO22`, `AD0 -> GND`.
-Pins live in [firmware/main/mpu.h](firmware/main/mpu.h).
-
-**The 26 MHz crystal matters.** Most ESP32 boards use 40 MHz and ESP-IDF defaults
-to that; on this board the mismatch garbles every UART byte the app prints.
-`CONFIG_XTAL_FREQ_AUTO=y` in [firmware/sdkconfig.defaults](firmware/sdkconfig.defaults)
-detects it at boot. If serial output ever turns to mojibake, check that first.
-
-## Build and flash
-
-```bash
-scripts/flash.sh            # build + flash /dev/ttyUSB0
-scripts/monitor.sh          # IDF serial monitor (Ctrl-] to exit)
-```
-
-Or by hand: `. scripts/env.sh` then `cd firmware && idf.py build flash monitor`.
-
-## Reading the stream
-
-The host script needs `python3.11` — that is the interpreter with pyserial here.
-
-```bash
-python3.11 host/read_imu.py                 # live pitch/roll/rate view
-python3.11 host/read_imu.py --csv run.csv   # log while viewing
-python3.11 host/read_imu.py --raw           # verbatim lines
-```
-
-## Wire format
-
-One line per sample, 100 Hz. Data lines start with `D,`; everything else is an
-IDF log line, so a reader can key on the prefix.
-
-```
-H,millis,ax_g,ay_g,az_g,gx_dps,gy_dps,gz_dps,temp_c
-D,148,-1.6426,-0.1421,1.0298,3.08,14.06,-66.60,27.87
-```
-
-Ranges: accel ±4 g, gyro ±500 deg/s, DLPF 44 Hz, 200 Hz internal sample rate
-decimated to a 100 Hz stream.
-
-## Verified
-
-100.0 Hz sustained, no reboots over a 6 s capture, 1.0 g magnitude at rest.
+**Not a medical device.** Anomaly flags are indicative and belong in a
+conversation with a clinician, not in a diagnosis.
 
 ---
 
-# RespTalk (Arduino Uno + HC-05)
+# The device (Arduino Uno + HC-05)
 
 The second rig in this project: three breaths form a Morse-like pattern that
 resolves to a word, shown on an OLED and sent over Bluetooth.
@@ -95,7 +67,7 @@ carries the full trace and not just the word. `USE_SOFTSERIAL` in the sketch is
 
 ## OLED sketch
 
-[arduino/resptalk_oled/resptalk_oled.ino](arduino/resptalk_oled/resptalk_oled.ino)
+[arduino/nuvia_oled/nuvia_oled.ino](arduino/nuvia_oled/nuvia_oled.ino)
 replaces the 16x2 LCD with an SSD1306 128x64. Needs Adafruit GFX + Adafruit
 SSD1306 from Library Manager.
 
@@ -160,7 +132,7 @@ python3.11 web/server.py --demo    # synthetic data, no hardware needed
 
 Needs `uvicorn` (installed). No other dependencies — the charts are hand-rolled
 SVG, so it works offline with no CDN. Flash
-[arduino/resptalk_raw](arduino/resptalk_raw/resptalk_raw.ino) or the main sketch;
+[arduino/nuvia_raw](arduino/nuvia_raw/nuvia_raw.ino) or the main sketch;
 both emit `ADC:<n>`, which is what the server parses.
 
 ![dashboard](docs/web-dashboard.png)
@@ -240,3 +212,63 @@ implying breathing stopped.
 
 Not a medical device. The anomaly flags are indicative and belong in a
 conversation with a clinician, not in a diagnosis.
+
+---
+
+# Appendix: ESP32 + MPU-6050 rig
+
+A second rig, kept because it is the basis for the worn sensor Nuvia needs for
+overnight monitoring. The firmware identifies the IMU, configures it and streams
+motion over USB serial as CSV; the host script reads, displays and logs it.
+
+## Hardware as tested
+
+| | |
+|---|---|
+| Board | ESP32-D0WD-V3 (WROOM-32), CP2102 USB bridge, **26 MHz crystal** |
+| IMU | MPU-6050 at I2C address `0x68` (WHO_AM_I `0x68`) |
+| Port | `/dev/ttyUSB0` @ 115200 |
+
+Wiring: `VCC -> 3V3`, `GND -> GND`, `SDA -> GPIO21`, `SCL -> GPIO22`, `AD0 -> GND`.
+Pins live in [firmware/main/mpu.h](firmware/main/mpu.h).
+
+**The 26 MHz crystal matters.** Most ESP32 boards use 40 MHz and ESP-IDF defaults
+to that; on this board the mismatch garbles every UART byte the app prints.
+`CONFIG_XTAL_FREQ_AUTO=y` in [firmware/sdkconfig.defaults](firmware/sdkconfig.defaults)
+detects it at boot. If serial output ever turns to mojibake, check that first.
+
+## Build and flash
+
+```bash
+scripts/flash.sh            # build + flash /dev/ttyUSB0
+scripts/monitor.sh          # IDF serial monitor (Ctrl-] to exit)
+```
+
+Or by hand: `. scripts/env.sh` then `cd firmware && idf.py build flash monitor`.
+
+## Reading the stream
+
+The host script needs `python3.11` — that is the interpreter with pyserial here.
+
+```bash
+python3.11 host/read_imu.py                 # live pitch/roll/rate view
+python3.11 host/read_imu.py --csv run.csv   # log while viewing
+python3.11 host/read_imu.py --raw           # verbatim lines
+```
+
+## Wire format
+
+One line per sample, 100 Hz. Data lines start with `D,`; everything else is an
+IDF log line, so a reader can key on the prefix.
+
+```
+H,millis,ax_g,ay_g,az_g,gx_dps,gy_dps,gz_dps,temp_c
+D,148,-1.6426,-0.1421,1.0298,3.08,14.06,-66.60,27.87
+```
+
+Ranges: accel ±4 g, gyro ±500 deg/s, DLPF 44 Hz, 200 Hz internal sample rate
+decimated to a 100 Hz stream.
+
+## Verified
+
+100.0 Hz sustained, no reboots over a 6 s capture, 1.0 g magnitude at rest.

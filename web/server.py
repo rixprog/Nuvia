@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RespTalk web server.
+"""Nuvia web server.
 
 Reads the Arduino's raw ADC stream over Bluetooth, detects breaths, stores
 everything in SQLite, and serves the dashboard.
@@ -30,7 +30,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STATIC = HERE / "static"
-DB_PATH = HERE / "resptalk.db"
+DB_PATH = HERE / "nuvia.db"
 
 HC05_MAC = "00:25:00:00:56:86"
 HC05_CHANNEL = 1
@@ -698,7 +698,7 @@ def main():
 
     import uvicorn
     hub = Hub(demo=args.demo)
-    print(f"RespTalk -> http://{args.host}:{args.port}"
+    print(f"Nuvia -> http://{args.host}:{args.port}"
           + ("   [demo mode]" if args.demo else ""))
     uvicorn.run(App(hub), host=args.host, port=args.port, log_level="warning")
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""RespTalk live decoder.
+"""Nuvia live decoder.
 
 Reads the raw A0 stream from the Arduino over Bluetooth, detects breaths,
 classifies each as short (.) or long (-), and decodes three-breath patterns
 into words. Thresholds come from your own recorded calibration.
 
-Flash arduino/resptalk_raw/resptalk_raw.ino first - this needs the raw ADC
-stream, not the word output of resptalk_oled.
+Flash arduino/nuvia_raw/nuvia_raw.ino first - this needs the raw ADC
+stream, not the word output of nuvia_oled.
 
   python3.11 breath_live.py                 # live
   python3.11 breath_live.py --replay        # decode the calibration files
@@ -43,7 +43,7 @@ WORDS = {
 HC05_MAC = "00:25:00:00:56:86"
 HC05_CHANNEL = 1
 
-SAMPLE_RATE = 100          # must match resptalk_raw.ino
+SAMPLE_RATE = 100          # must match nuvia_raw.ino
 CALIB_DIR = "breath_calibration"
 
 # A sample counts as breath while it is above GATE. The breath is only
@@ -336,8 +336,8 @@ def live(decoder):
                 except ValueError:
                     ignored += 1
                     if ignored == 20:
-                        print("\r  Receiving text, not numbers - is resptalk_oled"
-                              " flashed instead of resptalk_raw?")
+                        print("\r  Receiving text, not numbers - is nuvia_oled"
+                              " flashed instead of nuvia_raw?")
                     continue
 
                 report(decoder.feed(value))

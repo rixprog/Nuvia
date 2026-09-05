@@ -1,4 +1,4 @@
-/* RespTalk dashboard.
+/* Nuvia dashboard.
    Charts are hand-rolled SVG: no CDN, works offline, and the mark geometry
    is under our control (thin marks, rounded data-ends, hairline chrome). */
 
@@ -221,14 +221,14 @@ function applyTheme(theme) {
 }
 
 const urlTheme = new URLSearchParams(location.search).get("theme");
-applyTheme(urlTheme || localStorage.getItem("resptalk-theme") || null);
+applyTheme(urlTheme || localStorage.getItem("nuvia-theme") || null);
 
 $("#themeToggle").addEventListener("click", () => {
   const dark = matchMedia("(prefers-color-scheme: dark)").matches;
   const current = document.documentElement.getAttribute("data-theme")
     || (dark ? "dark" : "light");
   const next = current === "dark" ? "light" : "dark";
-  localStorage.setItem("resptalk-theme", next);
+  localStorage.setItem("nuvia-theme", next);
   applyTheme(next);
   if (!$("[data-page=analytics]").hidden && state.analytics) loadAnalytics();
 });
