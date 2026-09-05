@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RespTalk</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="shell">
+
+  <aside class="rail">
+    <div class="brand">
+      <h1>RespTalk</h1>
+      <p>Breath interface &amp; respiratory monitor</p>
+    </div>
+
+    <nav class="nav" id="nav">
+      <button data-view="monitor"   aria-current="true">Monitor</button>
+      <button data-view="analytics">Analytics</button>
+      <button data-view="training">Training</button>
+      <button data-view="patterns">Patterns</button>
+    </nav>
+
+    <div class="rail-foot">
+      <div class="status"><span class="dot" id="statusDot"></span>
+        <span id="statusText">connecting</span></div>
+      <button class="theme-toggle" id="obOpen">Setup guide</button>
+      <button class="theme-toggle" id="themeToggle">Switch theme</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ================= MONITOR ================= -->
+    <section data-page="monitor">
+      <div class="page-head">
+        <h2>Monitor</h2>
+        <p>Live signal from the piezo sensor. A breath opens when the trace
+           crosses the gate and closes after the hold window.</p>
+      </div>
+
+      <div class="grid c4" style="margin-bottom:16px">
+        <div class="card stat"><div class="value" id="mLast">—<span class="unit"> ms</span></div>
+          <div class="label">Last breath</div></div>
+        <div class="card stat"><div class="value" id="mSymbol">—</div>
+          <div class="label">Classified as</div></div>
+        <div class="card stat"><div class="value" id="mToday">0</div>
+          <div class="label">Breaths today</div></div>
+        <div class="card stat"><div class="value" id="mThresh">—<span class="unit"> ms</span></div>
+          <div class="label">Short / long threshold</div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <h3>Live signal</h3>
+        <p class="sub">Envelope, 60-second window. The horizontal rule is the
+           detection gate.</p>
+        <div class="wave-wrap"><svg class="chart" id="waveChart" height="180"></svg></div>
+        <div class="row" style="margin-top:16px">
+          <div>
+            <div class="label muted" style="font-size:12px;margin-bottom:6px">Current pattern</div>
+            <div class="pattern-slots" id="slots"></div>
+          </div>
+          <div style="margin-left:auto;text-align:right">
+            <div class="label muted" style="font-size:12px">In progress</div>
+            <div class="mono" id="elapsed" style="font-size:22px">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid c2">
+        <div class="card">
+          <h3>Recent breaths</h3>
+          <p class="sub">Newest first</p>
+          <div id="recentBreaths"></div>
+        </div>
+        <div class="card">
+          <h3>Recognised words</h3>
+          <p class="sub">Completed three-breath patterns</p>
+          <div id="recentWords"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ANALYTICS ================= -->
+    <section data-page="analytics" hidden>
+      <div class="page-head">
+        <h2>Analytics</h2>
+        <p>Breathing recorded over the last 30 days, with anomalies measured
+           against this patient's own baseline rather than a population norm.</p>
+      </div>
+
+      <p class="note" id="coverageNote"></p>
+
+      <div class="grid c4" style="margin-bottom:16px">
+        <div class="card stat"><div class="value" id="aTotal">0</div>
+          <div class="label">Breaths recorded</div></div>
+        <div class="card stat"><div class="value" id="aMeanDur">—<span class="unit"> ms</span></div>
+          <div class="label">Mean duration</div></div>
+        <div class="card stat"><div class="value" id="aMeanPeak">—</div>
+          <div class="label">Mean peak amplitude</div></div>
+        <div class="card stat"><div class="value" id="aAnom">0</div>
+          <div class="label">Anomalies flagged</div></div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <h3>Coverage by hour of day</h3>
+        <p class="sub">Breaths detected in each hour, all days pooled. The
+           shaded band is 22:00&ndash;06:00.</p>
+        <svg class="chart" id="hourChart" height="200"></svg>
+      </div>
+
+      <div class="grid c2" style="margin-bottom:16px">
+        <div class="card">
+          <h3>Breath duration distribution</h3>
+          <p class="sub">200 ms bins. The rule marks the short/long threshold.</p>
+          <svg class="chart" id="durChart" height="200"></svg>
+        </div>
+        <div class="card">
+          <h3>Daily mean peak amplitude</h3>
+          <p class="sub">The trend to watch &mdash; a sustained fall suggests
+             weakening respiratory effort.</p>
+          <svg class="chart" id="trendChart" height="200"></svg>
+          <div id="trendNote"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Anomalies</h3>
+        <p class="sub">Flagged against this patient's own rolling baseline.
+           Indicative only &mdash; not a diagnosis.</p>
+        <div id="anomalyList"></div>
+      </div>
+    </section>
+
+    <!-- ================= TRAINING ================= -->
+    <section data-page="training" hidden>
+      <div class="page-head">
+        <h2>Training</h2>
+        <p>Guided breathing exercises. Effort is measured from the same sensor,
+           so progress is tracked automatically.</p>
+      </div>
+
+      <div id="exerciseHome">
+        <div class="grid c3" style="margin-bottom:16px">
+
+          <button class="game-card" data-ex="sustained">
+            <div class="thumb">
+              <svg viewBox="0 0 200 108" aria-hidden="true">
+                <rect x="86" y="12" width="28" height="84" rx="12"
+                      fill="none" stroke="var(--grid)" stroke-width="2"/>
+                <rect x="88" y="40" width="24" height="30" fill="var(--wash)"/>
+                <circle cx="100" cy="48" r="10" fill="var(--series-1)"/>
+                <path d="M100 74 v18 M92 84 l8 10 8 -10" stroke="var(--axis)"
+                      stroke-width="2" fill="none" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div class="meta">
+              <h4>Lift</h4>
+              <p>Hold the float in the zone. Trains expiratory endurance &mdash;
+                 the incentive-spirometer exercise.</p>
+              <div class="best" data-best="sustained"></div>
+            </div>
+          </button>
+
+          <button class="game-card" data-ex="peak">
+            <div class="thumb">
+              <svg viewBox="0 0 200 108" aria-hidden="true">
+                <rect x="52" y="30" width="20" height="66" rx="5" fill="var(--axis)"/>
+                <rect x="80" y="16" width="20" height="80" rx="5" fill="var(--series-1)"/>
+                <rect x="108" y="46" width="20" height="50" rx="5" fill="var(--axis)"/>
+                <rect x="136" y="24" width="20" height="72" rx="5" fill="var(--series-1)"/>
+                <path d="M42 26 h124" stroke="var(--series-2)" stroke-width="2"/>
+              </svg>
+            </div>
+            <div class="meta">
+              <h4>Surge</h4>
+              <p>Sharp, forceful breaths. Trains the expiratory push an
+                 effective cough depends on.</p>
+              <div class="best" data-best="peak"></div>
+            </div>
+          </button>
+
+          <button class="game-card" data-ex="rhythm">
+            <div class="thumb">
+              <svg viewBox="0 0 200 108" aria-hidden="true">
+                <path d="M8 54 h184" stroke="var(--grid)" stroke-width="2"/>
+                <path d="M46 26 v56" stroke="var(--series-2)" stroke-width="2"/>
+                <circle cx="78" cy="54" r="10" fill="var(--series-1)"/>
+                <rect x="104" y="46" width="42" height="16" rx="8" fill="var(--series-1)"/>
+                <circle cx="168" cy="54" r="10" fill="var(--series-1)"/>
+              </svg>
+            </div>
+            <div class="meta">
+              <h4>Cadence</h4>
+              <p>Match short and long to the beat. Trains the fine control the
+                 morse patterns depend on.</p>
+              <div class="best" data-best="rhythm"></div>
+            </div>
+          </button>
+
+        </div>
+
+        <div class="card">
+          <h3>Progress</h3>
+          <p class="sub">Best result per session. Each exercise has its own unit, so each gets its own scale.</p>
+          <div class="grid c3" id="trainCharts"></div>
+        </div>
+      </div>
+
+      <div id="exerciseRun" hidden>
+        <div class="game-shell">
+          <div class="game-bar">
+            <h3 id="exTitle">Exercise</h3>
+            <span class="prompt" id="exPrompt"></span>
+            <button class="btn" id="exQuit" style="margin-left:auto">End session</button>
+          </div>
+          <canvas class="game-canvas" id="gameCanvas"></canvas>
+          <div class="game-foot">
+            <div class="game-metric"><div class="k">Score</div>
+              <div class="v" id="exScore">0</div></div>
+            <div class="game-metric"><div class="k">Target</div>
+              <div class="v" id="exTarget">&mdash;</div></div>
+            <div class="game-metric"><div class="k">Last breath</div>
+              <div class="v" id="exLast">&mdash;</div></div>
+            <div class="game-metric" style="margin-left:auto">
+              <div class="k">Reps</div><div class="streak" id="exStreak"></div></div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ================= PATTERNS ================= -->
+    <section data-page="patterns" hidden>
+      <div class="page-head">
+        <h2>Patterns</h2>
+        <p>The morse table and the thresholds that decide what counts as a
+           short or long breath.</p>
+      </div>
+
+      <div class="grid c2">
+        <div class="card">
+          <h3>Morse table</h3>
+          <p class="sub">Three breaths per word. Eight combinations exist;
+             unused ones are simply unassigned.</p>
+          <div id="patternEditor"></div>
+          <div class="row" style="margin-top:16px">
+            <button class="btn primary" id="savePatterns">Save table</button>
+            <span class="muted" id="patternMsg"></span>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:16px">
+            <h3>Calibration</h3>
+            <p class="sub">Record your own breaths to set the short/long
+               threshold. Six of each is usually enough.</p>
+            <div class="row" style="margin-bottom:14px">
+              <button class="btn" data-cal="short">Record short breath</button>
+              <button class="btn" data-cal="long">Record long breath</button>
+            </div>
+            <div id="calStatus" class="muted" style="margin-bottom:12px"></div>
+            <div id="calList"></div>
+            <div class="row" style="margin-top:16px">
+              <button class="btn primary" id="applyCal">Apply threshold</button>
+              <button class="btn" id="clearCal">Clear</button>
+            </div>
+            <div id="calResult" style="margin-top:12px"></div>
+          </div>
+
+          <div class="card">
+            <h3>Detection settings</h3>
+            <p class="sub">Change these only with a reason &mdash; calibration
+               sets the threshold for you.</p>
+            <div id="settingsForm"></div>
+            <div class="row" style="margin-top:14px">
+              <button class="btn" id="saveSettings">Save settings</button>
+              <span class="muted" id="settingsMsg"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="ob-overlay" id="onboarding" hidden>
+  <div class="ob-panel" role="dialog" aria-modal="true" aria-label="Setup guide">
+    <div class="ob-head">
+      <h2>Setting up</h2>
+      <div class="ob-pips">
+        <button class="ob-pip" aria-label="Step 1"></button>
+        <button class="ob-pip" aria-label="Step 2"></button>
+        <button class="ob-pip" aria-label="Step 3"></button>
+      </div>
+    </div>
+    <div id="obBody"></div>
+    <div class="ob-foot">
+      <button class="btn" id="obBack">Back</button>
+      <button class="btn primary" id="obNext">Next</button>
+      <button class="theme-toggle" id="obSkip" style="margin-left:auto">Skip setup</button>
+    </div>
+  </div>
+</div>
+
+<div class="tip" id="tip"></div>
+<script src="/static/games.js"></script>
+<script src="/static/onboarding.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

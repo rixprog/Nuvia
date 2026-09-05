@@ -1,0 +1,19 @@
+# Build output
+build/
+firmware/build/
+sdkconfig
+sdkconfig.old
+
+# Python
+__pycache__/
+*.pyc
+
+# Runtime data
+web/resptalk.db
+
+# Recorded breath data. These are real physiological recordings from a
+# person - keep them out of a public repo. Remove these lines if you want
+# sample data shipped with the project.
+breath_calibration/
+breath_calibration_archive/
+*.csv

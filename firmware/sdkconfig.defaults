@@ -1,0 +1,7 @@
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_FREERTOS_HZ=1000
+
+# This board runs a 26 MHz crystal, not the usual 40 MHz. Autodetect keeps the
+# UART baud and clock tree right on either variant.
+CONFIG_XTAL_FREQ_AUTO=y
