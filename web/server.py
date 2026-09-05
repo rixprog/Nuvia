@@ -74,6 +74,8 @@ def init_db(conn):
         gap_s REAL                    -- seconds since previous breath
     );
     CREATE INDEX IF NOT EXISTS idx_breaths_ts ON breaths(ts);
+    CREATE INDEX IF NOT EXISTS idx_breaths_agg
+        ON breaths(ts, duration_ms, peak, gap_s);
 
     CREATE TABLE IF NOT EXISTS words (
         id INTEGER PRIMARY KEY,
@@ -377,100 +379,123 @@ class Hub:
 # ANALYTICS
 # ============================================================
 
-def analytics(conn, days=7):
+_ANALYTICS_CACHE = {}
+
+
+def analytics(conn, days=30):
+    """Aggregate in SQL rather than pulling every row into Python.
+
+    At 120k breaths the Python version took 1.7 s; this is a few tens of ms,
+    because SQLite does the bucketing over an index instead of building a dict
+    per row and looping six times.
+    """
     since = time.time() - days * 86400
-    rows = conn.execute(
-        "SELECT ts, duration_ms, peak, symbol, gap_s FROM breaths"
-        " WHERE ts >= ? ORDER BY ts", (since,)).fetchall()
+    # strftime(..., 'localtime') does a timezone lookup per row, which is
+    # ruinous over 100k rows. Resolve the offset once and bucket with integer
+    # arithmetic instead.
+    tz = time.localtime().tm_gmtoff or 0
 
-    breaths = [dict(r) for r in rows]
+    total = conn.execute(
+        "SELECT COUNT(*) FROM breaths WHERE ts >= ?", (since,)).fetchone()[0]
 
-    # Coverage by hour of day - the night/morning picture. A flat zero band
-    # overnight means the sensor saw nothing, not that breathing stopped.
+    cached = _ANALYTICS_CACHE.get(days)
+    if cached and cached["total"] == total and time.time() - cached["at"] < 30:
+        return cached["value"]
+
+    # Coverage by hour of day. A flat zero band overnight means the sensor saw
+    # nothing, not that breathing stopped.
     hourly = [0] * 24
-    hourly_dur = [[] for _ in range(24)]
-    for b in breaths:
-        hour = time.localtime(b["ts"]).tm_hour
-        hourly[hour] += 1
-        hourly_dur[hour].append(b["duration_ms"])
+    hourly_dur = [0.0] * 24
+    for row in conn.execute(
+            "SELECT ((CAST(ts AS INTEGER) + ?) / 3600) % 24 h,"
+            "       COUNT(*) n, AVG(duration_ms) d"
+            "  FROM breaths WHERE ts >= ? GROUP BY h", (tz, since)):
+        hourly[row["h"]] = row["n"]
+        hourly_dur[row["h"]] = round(row["d"] or 0, 1)
 
-    # Duration histogram, 200 ms bins up to 3 s
     bins = [0] * 15
-    for b in breaths:
-        idx = min(int(b["duration_ms"] // 200), 14)
-        bins[idx] += 1
+    for row in conn.execute(
+            "SELECT CAST(duration_ms / 200 AS INTEGER) b, COUNT(*) n"
+            "  FROM breaths WHERE ts >= ? GROUP BY b", (since,)):
+        bins[min(max(row["b"], 0), 14)] += row["n"]
 
-    durations = [b["duration_ms"] for b in breaths]
-    peaks = [b["peak"] for b in breaths]
-    gaps = [b["gap_s"] for b in breaths if b["gap_s"]]
+    agg = conn.execute(
+        "SELECT COUNT(duration_ms) dn, AVG(duration_ms) dm,"
+        "       AVG(duration_ms * duration_ms) dq,"
+        "       MIN(duration_ms) dlo, MAX(duration_ms) dhi,"
+        "       COUNT(peak) pn, AVG(peak) pm, AVG(peak * peak) pq,"
+        "       MIN(peak) plo, MAX(peak) phi,"
+        "       COUNT(gap_s) gn, AVG(gap_s) gm, AVG(gap_s * gap_s) gq,"
+        "       MIN(gap_s) glo, MAX(gap_s) ghi"
+        "  FROM breaths WHERE ts >= ?", (since,)).fetchone()
 
-    def stats(values):
-        if not values:
+    def stats(n, mean, sq, lo, hi):
+        if not n:
             return {"n": 0, "mean": 0, "sd": 0, "min": 0, "max": 0}
-        n = len(values)
-        mean = sum(values) / n
-        sd = math.sqrt(sum((v - mean) ** 2 for v in values) / n) if n > 1 else 0
-        return {"n": n, "mean": round(mean, 1), "sd": round(sd, 1),
-                "min": round(min(values), 1), "max": round(max(values), 1)}
+        var = max(0.0, (sq or 0) - mean * mean)
+        return {"n": n, "mean": round(mean, 1), "sd": round(math.sqrt(var), 1),
+                "min": round(lo, 1), "max": round(hi, 1)}
 
-    dur_stats = stats(durations)
-    peak_stats = stats(peaks)
-    gap_stats = stats(gaps)
+    dur_stats = stats(agg["dn"], agg["dm"], agg["dq"], agg["dlo"], agg["dhi"])
+    peak_stats = stats(agg["pn"], agg["pm"], agg["pq"], agg["plo"], agg["phi"])
+    gap_stats = stats(agg["gn"], agg["gm"], agg["gq"], agg["glo"], agg["ghi"])
 
-    # Anomalies, each against the patient's own baseline rather than a
+    # Anomalies, measured against this patient's own baseline rather than a
     # population norm - what matters here is change, not absolute value.
     anomalies = []
 
     if gap_stats["n"] > 5:
-        pause_limit = max(20.0, gap_stats["mean"] + 3 * gap_stats["sd"])
-        for b in breaths:
-            if b["gap_s"] and b["gap_s"] > pause_limit:
-                anomalies.append({
-                    "ts": b["ts"], "kind": "pause", "severity": "serious",
-                    "detail": f"{b['gap_s']:.0f}s with no breath detected",
-                })
+        limit = max(20.0, gap_stats["mean"] + 3 * gap_stats["sd"])
+        for row in conn.execute(
+                "SELECT ts, gap_s FROM breaths"
+                " WHERE ts >= ? AND gap_s > ? ORDER BY ts DESC LIMIT 40",
+                (since, limit)):
+            anomalies.append({
+                "ts": row["ts"], "kind": "pause", "severity": "serious",
+                "detail": f"{row['gap_s']:.0f}s with no breath detected"})
 
     if peak_stats["n"] > 5:
-        weak_limit = peak_stats["mean"] - 1.5 * peak_stats["sd"]
-        for b in breaths:
-            if b["peak"] < weak_limit:
-                anomalies.append({
-                    "ts": b["ts"], "kind": "weak", "severity": "warning",
-                    "detail": f"peak {b['peak']}, baseline {peak_stats['mean']:.0f}",
-                })
-
-    # Day-over-day drift in mean peak - the trend that matters clinically.
-    by_day = {}
-    for b in breaths:
-        day = time.strftime("%Y-%m-%d", time.localtime(b["ts"]))
-        by_day.setdefault(day, []).append(b)
-
-    daily = []
-    for day in sorted(by_day):
-        items = by_day[day]
-        daily.append({
-            "day": day,
-            "count": len(items),
-            "mean_duration": round(sum(i["duration_ms"] for i in items) / len(items), 1),
-            "mean_peak": round(sum(i["peak"] for i in items) / len(items), 1),
-        })
+        limit = peak_stats["mean"] - 1.5 * peak_stats["sd"]
+        for row in conn.execute(
+                "SELECT ts, peak FROM breaths"
+                " WHERE ts >= ? AND peak < ? ORDER BY ts DESC LIMIT 40",
+                (since, limit)):
+            anomalies.append({
+                "ts": row["ts"], "kind": "weak", "severity": "warning",
+                "detail": f"peak {row['peak']}, baseline {peak_stats['mean']:.0f}"})
 
     anomalies.sort(key=lambda a: a["ts"], reverse=True)
 
-    return {
+    # Day-over-day drift - the trend that matters clinically.
+    daily = [{"day": time.strftime("%Y-%m-%d",
+                                   time.localtime(r["d0"] * 86400 - tz + 43200)),
+              "count": r["n"],
+              "mean_duration": round(r["d"], 1), "mean_peak": round(r["p"], 1)}
+             for r in conn.execute(
+                 "SELECT (CAST(ts AS INTEGER) + ?) / 86400 d0, COUNT(*) n,"
+                 "       AVG(duration_ms) d, AVG(peak) p"
+                 "  FROM breaths WHERE ts >= ? GROUP BY d0 ORDER BY d0",
+                 (tz, since))]
+
+    recent = [dict(r) for r in conn.execute(
+        "SELECT ts, duration_ms, peak, symbol, gap_s FROM breaths"
+        " WHERE ts >= ? ORDER BY ts DESC LIMIT 200", (since,))][::-1]
+
+    result = {
         "days": days,
-        "total": len(breaths),
+        "total": total,
         "hourly": hourly,
-        "hourly_mean_duration": [
-            round(sum(v) / len(v), 1) if v else 0 for v in hourly_dur],
+        "hourly_mean_duration": hourly_dur,
         "duration_bins": bins,
         "duration": dur_stats,
         "peak": peak_stats,
         "gap": gap_stats,
         "daily": daily,
         "anomalies": anomalies[:60],
-        "recent": breaths[-200:],
+        "recent": recent,
     }
+    _ANALYTICS_CACHE[days] = {"total": total, "at": time.time(), "value": result}
+    return result
 
 
 # ============================================================

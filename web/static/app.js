@@ -656,9 +656,13 @@ $("#clearCal").addEventListener("click", async () => {
 
 const RAW = { lines: [], paused: false, hex: false, max: 1200 };
 
-function rawRender() {
+let rawLastDraw = 0;
+function rawRender(force) {
   const box = $("#rawBox");
   if (!box || $("[data-page=data]").hidden) return;
+  const now = performance.now();
+  if (!force && now - rawLastDraw < 160) return;
+  rawLastDraw = now;
   const tail = RAW.lines.slice(-260);
   box.textContent = RAW.hex
     ? tail.map(v => v.toString(16).padStart(3, "0")).join(" ")
@@ -673,7 +677,7 @@ $("#rawPause").addEventListener("click", e => {
 $("#rawHex").addEventListener("click", e => {
   RAW.hex = !RAW.hex;
   e.target.textContent = RAW.hex ? "Decimal" : "Hex";
-  rawRender();
+  rawRender(true);
 });
 $("#rawSave").addEventListener("click", e => {
   const text = RAW.lines.map(v => `ADC:${v}`).join("\n");
@@ -697,7 +701,7 @@ function applyRecState(r) {
 }
 
 async function loadData() {
-  rawRender();
+  rawRender(true);
   const [{ files, recording }, a] = await Promise.all([
     api("/api/recordings"), api("/api/analytics"),
   ]);
@@ -918,7 +922,13 @@ function connect() {
       .includes(initial))
     show(initial, false);
 
+  let resizeTimer = null;
   addEventListener("resize", () => {
-    if (!$("[data-page=analytics]").hidden && state.analytics) loadAnalytics();
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      const view = [...$$("[data-page]")].find(s => !s.hidden)?.dataset.page;
+      if (view === "analytics" && state.analytics) loadAnalytics();
+      else if (view === "training") loadTraining();
+    }, 180);
   });
 })();

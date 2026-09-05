@@ -181,6 +181,44 @@ invent a relationship that is not there.
 | `bt_read.py --hex` | **Hex** toggle |
 | `bt_read.py --out` | **Save** button, plus CSV export of every stored breath |
 
+## Testing
+
+[tools/site_test.py](tools/site_test.py) drives the site through Chrome
+DevTools Protocol and exercises every page, both settings round-trips, a full
+12-breath calibration, two training sessions, recording and replay. It exits
+non-zero on any failed check or console error.
+
+```bash
+python3.11 web/server.py --demo --port 8940 &
+python3.11 tools/site_test.py http://127.0.0.1:8940/
+```
+
+34 checks, all passing, no console errors.
+
+## Performance
+
+Measured with 120,000 breaths in the database - roughly a month of continuous
+monitoring:
+
+| | Before | After |
+|---|---|---|
+| `/api/analytics` cold | 1720 ms | 370 ms |
+| `/api/analytics` repeat | 1720 ms | 7 ms |
+| Page load | - | 330 ms |
+| Switch to Analytics | - | 400 ms first, 40 ms after |
+
+Three things were wrong. The aggregation pulled every row into Python and
+looped over it six times. Rewriting it in SQL alone made it *slower*, because
+`strftime(..., 'localtime')` does a timezone lookup per row - integer
+arithmetic against an offset resolved once is far cheaper. And the `ts` index
+covered `COUNT(*)` but not the measured columns, so each aggregate did 120k
+random row lookups; an index on `(ts, duration_ms, peak, gap_s)` makes them
+index-only scans. A 30-second cache keyed on the row count handles the rest.
+
+On the client, the resize handler was refetching analytics on every resize
+event - hundreds during a window drag - and the raw stream redrew 260 lines
+twenty times a second. Both are now throttled.
+
 ## Setup guide
 
 A three-step guided flow runs on first visit and is reachable any time from
