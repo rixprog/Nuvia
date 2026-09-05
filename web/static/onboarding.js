@@ -187,8 +187,9 @@ function initOnboarding() {
   // a carer directly to the placement instructions.
   const params = new URLSearchParams(location.search);
   const jump = params.get("obstep");
-  if (jump !== null) openOnboarding(Math.max(0, Math.min(2, Number(jump))));
-  else if (!params.has("game")
+  const n = Number(jump);
+  if (jump !== null && Number.isInteger(n) && n >= 0 && n <= 2) openOnboarding(n);
+  else if (jump === null && !params.has("game")
            && !localStorage.getItem("nuvia-setup-done")) openOnboarding(0);
 }
 

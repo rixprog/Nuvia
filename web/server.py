@@ -217,6 +217,7 @@ class Hub:
         self.clients = set()
         self.lock = threading.Lock()
         self.status = "starting"
+        self.status_info = {}
         self.last_value = 0
         self.settings = get_settings(self.conn)
         self.patterns = get_patterns(self.conn)
@@ -280,14 +281,15 @@ class Hub:
         while True:
             try:
                 self.status = "connecting"
-                self.broadcast("status", {"state": self.status})
+                self.broadcast("status", {"state": "connecting"})
                 sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM,
                                      socket.BTPROTO_RFCOMM)
                 sock.settimeout(10.0)
                 sock.connect((HC05_MAC, HC05_CHANNEL))
                 sock.settimeout(0.5)
                 self.status = "connected"
-                self.broadcast("status", {"state": self.status})
+                self.status_info = {"state": "connected"}
+                self.broadcast("status", self.status_info)
 
                 buffer = b""
                 while True:
@@ -314,8 +316,10 @@ class Hub:
                             pass
                 sock.close()
             except OSError as error:
-                self.status = f"disconnected: {error}"
-                self.broadcast("status", {"state": self.status})
+                self.status = "disconnected"
+                self.status_info = {"state": "disconnected",
+                                    "errno": error.errno, "detail": str(error)}
+                self.broadcast("status", self.status_info)
                 time.sleep(3)
 
     def run_demo(self):
@@ -518,9 +522,10 @@ class App:
         with self.hub.lock:
             self.hub.clients.add(queue)
 
-        await send({"type": "websocket.send",
-                    "text": json.dumps({"type": "status",
-                                        "data": {"state": self.hub.status}})})
+        await send({"type": "websocket.send", "text": json.dumps({
+            "type": "status",
+            "data": self.hub.status_info or {"state": self.hub.status},
+        })})
 
         async def pump():
             while True:

@@ -671,13 +671,83 @@ $("#applyCal").addEventListener("click", async () => {
    LIVE STREAM
    ========================================================== */
 
-function setStatus(text) {
+// errno -> what the user should actually do about it. An echoed
+// "[Errno 112] Host is down" tells them nothing.
+const CONNECTION_HELP = {
+  112: {                       // EHOSTDOWN
+    title: "The sensor is not transmitting",
+    why: "Bluetooth is working here, but nothing is answering at that address.",
+    steps: ["Check the Arduino has power",
+            "Check the HC-05 LED is blinking rapidly",
+            "Move within a few metres of the computer"],
+  },
+  113: {                       // EHOSTUNREACH
+    title: "The sensor is out of range",
+    why: "The device was found but could not be reached.",
+    steps: ["Move closer to the computer", "Check for anything blocking the signal"],
+  },
+  16: {                        // EBUSY
+    title: "Something else is holding the connection",
+    why: "Another program on this computer already has the serial port open.",
+    steps: ["Close breath_live.py or bluetooth_rec.py if either is running",
+            "Then reload this page"],
+  },
+  111: {                       // ECONNREFUSED
+    title: "The sensor refused the connection",
+    why: "HC-05 accepts one master at a time and is already paired to something.",
+    steps: ["Disconnect it from your phone or any other laptop",
+            "Turn Bluetooth off on that device if unsure"],
+  },
+};
+
+function setStatus(state, info) {
+  const text = state === "disconnected" && info && info.detail
+    ? "disconnected" : state;
   $("#statusText").textContent = text;
   const dot = $("#statusDot");
   dot.className = "dot " + (
-    text === "connected" ? "live" :
-    text === "demo" ? "warn" :
-    text.startsWith("disconnected") ? "down" : "");
+    state === "connected" ? "live" :
+    state === "demo" ? "warn" :
+    state === "disconnected" ? "down" : "");
+
+  renderConnectionPanel(state, info);
+}
+
+// A dashboard with no data and no explanation reads as broken software. Say
+// what is wrong and what to do, on the page rather than in a sidebar label.
+function renderConnectionPanel(state, info) {
+  const host = $("#connPanel");
+  if (!host) return;
+
+  if (state === "connected" || state === "demo") {
+    host.innerHTML = "";
+    host.hidden = true;
+    return;
+  }
+  host.hidden = false;
+
+  if (state === "connecting" || state === "reconnecting") {
+    host.innerHTML = `<div class="conn"><div class="conn-title">
+      Looking for the sensor\u2026</div></div>`;
+    return;
+  }
+
+  const help = (info && CONNECTION_HELP[info.errno]) || {
+    title: "Cannot reach the sensor",
+    why: info && info.detail ? info.detail : "",
+    steps: ["Check the device has power and is in range"],
+  };
+
+  host.innerHTML = `
+    <div class="conn">
+      <div class="conn-title"><span class="dot down"></span>${help.title}</div>
+      ${help.why ? `<p class="conn-why">${help.why}</p>` : ""}
+      <ul class="conn-steps">${help.steps.map(x => `<li>${x}</li>`).join("")}</ul>
+      <p class="conn-why">Retrying every 3 seconds. To explore the interface
+        without hardware, restart the server with
+        <code>--demo</code>.</p>
+      ${info && info.detail ? `<p class="conn-raw">${info.detail}</p>` : ""}
+    </div>`;
 }
 
 function connect() {
@@ -688,7 +758,7 @@ function connect() {
 
     if (type === "status") {
       window.__lastStatus = data.state;
-      setStatus(data.state);
+      setStatus(data.state, data);
       RespOnboarding.status(data.state);
 
     } else if (type === "wave") {
@@ -732,6 +802,7 @@ function connect() {
   };
 
   ws.onclose = () => { setStatus("reconnecting"); setTimeout(connect, 1500); };
+  ws.onerror = () => ws.close();
 }
 
 /* ==========================================================
