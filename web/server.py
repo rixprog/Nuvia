@@ -18,6 +18,8 @@ a few percent; assuming a wrong sample rate was a factor of 2-4.
 """
 
 import argparse
+import csv as csvmod
+import io
 import json
 import math
 import os
@@ -26,11 +28,13 @@ import socket
 import sqlite3
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STATIC = HERE / "static"
 DB_PATH = HERE / "nuvia.db"
+RECORDINGS = HERE / "recordings"
 
 HC05_MAC = "00:25:00:00:56:86"
 HC05_CHANNEL = 1
@@ -224,6 +228,9 @@ class Hub:
         self.detector = BreathDetector(self.settings, self.patterns)
         self.recent = []           # rolling window for the live chart
         self.capture = None        # active calibration capture, if any
+        self.raw_tail = deque(maxlen=4000)   # what bt_read.py --raw shows
+        self.raw_batch = []
+        self.recording = None      # open CSV writer when recording a session
         self.loop = None
 
     # -- settings ------------------------------------------------------
@@ -248,6 +255,13 @@ class Hub:
     # -- sample ingestion ----------------------------------------------
     def on_sample(self, value, now):
         self.last_value = value
+        self.raw_tail.append((now, value))
+        self.raw_batch.append(value)
+        if self.recording:
+            self.recording["writer"].writerow(
+                [self.recording["n"], round((now - self.recording["t0"]) * 1000, 1),
+                 value])
+            self.recording["n"] += 1
         self.recent.append((now, value))
         if len(self.recent) > 1200:
             del self.recent[:len(self.recent) - 1200]
@@ -502,6 +516,9 @@ class App:
             hub = self.hub
             now = time.time()
             window = [v for t, v in hub.recent if now - t < 0.05]
+            if hub.raw_batch:
+                batch, hub.raw_batch = hub.raw_batch, []
+                hub.broadcast("raw", {"v": batch})
             hub.broadcast("wave", {
                 "v": max(window) if window else 0,
                 "active": hub.detector.active,
@@ -585,11 +602,16 @@ class App:
             return 404, [(b"content-type", b"text/plain")], b"not found"
 
         if path == "/api/state":
+            midnight = time.mktime(time.localtime()[:3] + (0, 0, 0, 0, 0, -1))
+            today = conn.execute(
+                "SELECT COUNT(*) FROM breaths WHERE ts >= ?",
+                (midnight,)).fetchone()[0]
             return self.json_response({
                 "status": hub.status,
                 "settings": hub.settings,
                 "patterns": hub.patterns,
                 "demo": hub.demo,
+                "today": today,
             })
 
         if path == "/api/analytics":
@@ -678,12 +700,115 @@ class App:
             conn.commit()
             return self.json_response({"ok": True})
 
+        if path == "/api/raw":
+            return self.json_response(
+                {"lines": [v for _, v in list(hub.raw_tail)[-800:]]})
+
+        if path == "/api/record" and method == "POST":
+            item = json.loads(body or b"{}")
+            if item.get("action") == "start" and not hub.recording:
+                RECORDINGS.mkdir(exist_ok=True)
+                name = time.strftime("session-%Y%m%d-%H%M%S.csv")
+                handle = open(RECORDINGS / name, "w", newline="")
+                writer = csvmod.writer(handle)
+                writer.writerow(["sample", "time_ms", "adc"])
+                hub.recording = {"handle": handle, "writer": writer,
+                                 "name": name, "t0": time.time(), "n": 0}
+            elif item.get("action") == "stop" and hub.recording:
+                hub.recording["handle"].close()
+                hub.recording = None
+            return self.json_response({
+                "recording": bool(hub.recording),
+                "name": hub.recording["name"] if hub.recording else None,
+                "samples": hub.recording["n"] if hub.recording else 0,
+            })
+
+        if path == "/api/recordings":
+            RECORDINGS.mkdir(exist_ok=True)
+            files = sorted((f.name for f in RECORDINGS.glob("*.csv")), reverse=True)
+            return self.json_response({"files": files,
+                                       "recording": bool(hub.recording)})
+
+        if path.startswith("/api/recordings/"):
+            name = os.path.basename(path[len("/api/recordings/"):])
+            target = RECORDINGS / name
+            if target.is_file() and target.suffix == ".csv":
+                return 200, [(b"content-type", b"text/csv"),
+                             (b"content-disposition",
+                              f'attachment; filename="{name}"'.encode())], \
+                    target.read_bytes()
+            return 404, [(b"content-type", b"text/plain")], b"not found"
+
+        if path == "/api/replay" and method == "POST":
+            # breath_live.py --replay: run a recording back through the
+            # detector so thresholds can be tuned without breathing again.
+            item = json.loads(body or b"{}")
+            target = RECORDINGS / os.path.basename(item.get("file", ""))
+            if not target.is_file():
+                return self.json_response({"error": "no such recording"}, 404)
+
+            settings = dict(hub.settings)
+            if item.get("threshold_ms"):
+                settings["threshold_ms"] = float(item["threshold_ms"])
+
+            det = BreathDetector(settings, hub.patterns)
+            breaths, words = [], []
+            with open(target) as handle:
+                for row in csvmod.DictReader(handle):
+                    try:
+                        t = float(row["time_ms"]) / 1000.0
+                        v = float(row["adc"])
+                    except (KeyError, ValueError):
+                        continue
+                    for kind, payload in det.feed(v, t):
+                        if kind == "breath":
+                            breaths.append(payload)
+                        elif kind == "word":
+                            words.append(payload)
+                # flush trailing silence so a final breath closes
+                tail = t + settings["hold_ms"] / 1000.0 + 0.5
+                for kind, payload in det.feed(0, tail):
+                    if kind == "breath":
+                        breaths.append(payload)
+                    elif kind == "word":
+                        words.append(payload)
+
+            return self.json_response({
+                "file": target.name,
+                "threshold_ms": settings["threshold_ms"],
+                "breaths": breaths, "words": words,
+            })
+
+        if path == "/api/export/breaths.csv":
+            out = io.StringIO()
+            w = csvmod.writer(out)
+            w.writerow(["timestamp", "iso", "duration_ms", "peak", "symbol", "gap_s"])
+            for r in conn.execute("SELECT * FROM breaths ORDER BY ts"):
+                w.writerow([r["ts"],
+                            time.strftime("%Y-%m-%d %H:%M:%S",
+                                          time.localtime(r["ts"])),
+                            r["duration_ms"], r["peak"], r["symbol"], r["gap_s"]])
+            return self.csv_response("breaths.csv", out.getvalue())
+
+        if path == "/api/export/calibration.csv":
+            out = io.StringIO()
+            w = csvmod.writer(out)
+            w.writerow(["timestamp", "label", "duration_ms", "peak"])
+            for r in conn.execute("SELECT * FROM calibration ORDER BY ts"):
+                w.writerow([r["ts"], r["label"], r["duration_ms"], r["peak"]])
+            return self.csv_response("calibration.csv", out.getvalue())
+
         if path == "/api/words":
             rows = conn.execute(
                 "SELECT * FROM words ORDER BY ts DESC LIMIT 50").fetchall()
             return self.json_response({"words": [dict(r) for r in rows]})
 
         return 404, [(b"content-type", b"text/plain")], b"not found"
+
+    def csv_response(self, name, text):
+        return 200, [(b"content-type", b"text/csv; charset=utf-8"),
+                     (b"content-disposition",
+                      f'attachment; filename="{name}"'.encode())], text.encode()
 
     def serve_file(self, path):
         if not path.is_file():

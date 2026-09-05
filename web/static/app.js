@@ -245,6 +245,7 @@ function show(view, push = true) {
   if (view === "analytics") loadAnalytics();
   if (view === "training") loadTraining();
   if (view === "patterns") loadCalibration();
+  if (view === "data") loadData();
 }
 $("#nav").addEventListener("click", e => {
   const b = e.target.closest("button");
@@ -611,61 +612,135 @@ $("#saveSettings").addEventListener("click", async () => {
 
 /* --- calibration --- */
 
-let calibrating = null;
-
-$$("[data-cal]").forEach(b => b.addEventListener("click", () => {
-  calibrating = b.dataset.cal;
-  $("#calStatus").textContent =
-    `Waiting for one ${calibrating} breath… breathe now.`;
-}));
+$("#openCal").addEventListener("click", () => RespCalibrate.open());
 
 async function loadCalibration() {
   renderPatternEditor();
   renderSettings();
   const { samples } = await api("/api/calibration");
-  const host = $("#calList");
+  const host = $("#calSummary");
   if (!samples.length) {
-    host.innerHTML = `<div class="empty">No calibration recorded yet.</div>`;
+    host.innerHTML = `<div class="empty">Not calibrated yet. Nuvia is using
+      the default ${Math.round(state.settings.threshold_ms)} ms threshold.</div>`;
     return;
   }
   const by = { short: [], long: [] };
   samples.forEach(s => by[s.label].push(s.duration_ms));
-  host.innerHTML = ["short", "long"].map(k => `
-    <div style="margin-bottom:8px">
-      <div style="font-size:12px" class="muted">${k.toUpperCase()}
-        (${by[k].length})</div>
-      <div class="mono">${by[k].length
-        ? by[k].map(v => Math.round(v)).join("  ") + " ms"
-        : "&mdash;"}</div>
-    </div>`).join("");
+  const sMax = by.short.length ? Math.max(...by.short) : null;
+  const lMin = by.long.length ? Math.min(...by.long) : null;
+  const clean = sMax !== null && lMin !== null && sMax < lMin;
+  host.innerHTML = `
+    <div class="cal-summary">
+      <div><span>Threshold</span><b>${Math.round(state.settings.threshold_ms)} ms</b></div>
+      <div><span>Short (${by.short.length})</span>
+        <b>${by.short.map(Math.round).join(", ") || "&mdash;"}</b></div>
+      <div><span>Long (${by.long.length})</span>
+        <b>${by.long.map(Math.round).join(", ") || "&mdash;"}</b></div>
+    </div>
+    ${clean
+      ? `<p class="cal-note" style="margin-top:10px">Clean separation,
+         ${Math.round(lMin - sMax)} ms of margin.</p>`
+      : (sMax !== null && lMin !== null
+        ? `<p class="cal-warn" style="margin-top:10px">The two classes overlap.
+           Recalibrate, making long breaths noticeably longer.</p>` : "")}`;
 }
 
 $("#clearCal").addEventListener("click", async () => {
   await fetch("/api/calibration", { method: "DELETE" });
-  $("#calResult").innerHTML = "";
   loadCalibration();
 });
 
-$("#applyCal").addEventListener("click", async () => {
-  const r = await post("/api/calibration/apply", {});
-  const host = $("#calResult");
-  if (r.error) {
-    host.innerHTML = `<span class="pill critical"><i></i>${r.error}</span>`;
-    return;
-  }
-  state.settings.threshold_ms = r.threshold_ms;
-  $("#mThresh").innerHTML =
-    `${r.threshold_ms}<span class="unit"> ms</span>`;
-  renderSettings();
-  host.innerHTML = r.clean
-    ? `<span class="pill good"><i></i>clean separation</span>
-       <div style="margin-top:8px">Threshold <b>${r.threshold_ms} ms</b>,
-       ${r.margin_ms} ms of margin.
-       ${r.margin_ms < 150 ? "<br><span class='muted'>That margin is thin — live breaths vary more than recorded ones.</span>" : ""}</div>`
-    : `<span class="pill warning"><i></i>classes overlap</span>
-       <div style="margin-top:8px">Best split is <b>${r.threshold_ms} ms</b>.
-       Re-record, exaggerating the difference.</div>`;
+/* ==========================================================
+   DATA - raw stream, recording, exports
+   ========================================================== */
+
+const RAW = { lines: [], paused: false, hex: false, max: 1200 };
+
+function rawRender() {
+  const box = $("#rawBox");
+  if (!box || $("[data-page=data]").hidden) return;
+  const tail = RAW.lines.slice(-260);
+  box.textContent = RAW.hex
+    ? tail.map(v => v.toString(16).padStart(3, "0")).join(" ")
+    : tail.map(v => `ADC:${v}`).join("\n");
+  box.scrollTop = box.scrollHeight;
+}
+
+$("#rawPause").addEventListener("click", e => {
+  RAW.paused = !RAW.paused;
+  e.target.textContent = RAW.paused ? "Resume" : "Pause";
 });
+$("#rawHex").addEventListener("click", e => {
+  RAW.hex = !RAW.hex;
+  e.target.textContent = RAW.hex ? "Decimal" : "Hex";
+  rawRender();
+});
+$("#rawSave").addEventListener("click", e => {
+  const text = RAW.lines.map(v => `ADC:${v}`).join("\n");
+  e.target.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+});
+
+$("#recToggle").addEventListener("click", async () => {
+  const on = $("#recToggle").dataset.on === "1";
+  const r = await post("/api/record", { action: on ? "stop" : "start" });
+  applyRecState(r);
+  loadData();
+});
+
+function applyRecState(r) {
+  const btn = $("#recToggle");
+  btn.dataset.on = r.recording ? "1" : "0";
+  btn.textContent = r.recording ? "Stop recording" : "Start recording";
+  $("#recStatus").innerHTML = r.recording
+    ? `<span class="rec-live">recording</span> ${r.name} &middot; ${r.samples} samples`
+    : "";
+}
+
+async function loadData() {
+  rawRender();
+  const [{ files, recording }, a] = await Promise.all([
+    api("/api/recordings"), api("/api/analytics"),
+  ]);
+  applyRecState({ recording, name: "", samples: 0 });
+
+  $("#recList").innerHTML = files.length
+    ? files.slice(0, 8).map(f => `<div class="recfile">
+        <span class="mono">${f}</span>
+        <button class="theme-toggle" data-replay="${f}"
+                style="margin-left:auto">replay</button>
+        <a href="/api/recordings/${f}" download>download</a>
+      </div>`).join("")
+    : `<div class="empty">No sessions recorded yet.</div>`;
+
+  $$("[data-replay]").forEach(b => b.addEventListener("click", () => replay(b.dataset.replay)));
+
+  $("#exportSummary").innerHTML = `<div class="cal-summary">
+    <div><span>Breaths</span><b>${a.total}</b></div>
+    <div><span>Words</span><b>${(await api("/api/words")).words.length}</b></div>
+  </div>`;
+}
+
+// Run a recording back through the detector at the current threshold. This is
+// breath_live.py --replay: tune the numbers without breathing again.
+async function replay(file) {
+  const host = $("#replayOut");
+  host.innerHTML = `<div class="muted">replaying ${file}\u2026</div>`;
+  const r = await post("/api/replay", { file });
+  if (r.error) { host.innerHTML = `<div class="cal-warn">${r.error}</div>`; return; }
+
+  const shorts = r.breaths.filter(b => b.symbol === ".").length;
+  host.innerHTML = `
+    <div class="cal-summary">
+      <div><span>Threshold</span><b>${Math.round(r.threshold_ms)} ms</b></div>
+      <div><span>Breaths</span><b>${r.breaths.length}
+        (${shorts} short, ${r.breaths.length - shorts} long)</b></div>
+      <div><span>Words</span><b>${r.words.map(w => w.word || w.pattern).join(", ")
+        || "&mdash;"}</b></div>
+    </div>
+    <div class="mono" style="margin-top:10px;font-size:12px;color:var(--ink-muted)">
+      ${r.breaths.map(b => `${b.symbol}${Math.round(b.duration_ms)}`).join("  ")}
+    </div>`;
+}
 
 /* ==========================================================
    LIVE STREAM
@@ -761,7 +836,15 @@ function connect() {
       setStatus(data.state, data);
       RespOnboarding.status(data.state);
 
+    } else if (type === "raw") {
+      if (!RAW.paused) {
+        RAW.lines.push(...data.v);
+        if (RAW.lines.length > RAW.max) RAW.lines.splice(0, RAW.lines.length - RAW.max);
+        rawRender();
+      }
+
     } else if (type === "wave") {
+      RespCalibrate.onWave(data, state.settings.gate || 30);
       if (activeGame) activeGame.feedLevel(data.v, state.settings.gate || 30);
       state.wave.push(data.v);
       if (state.wave.length > 1200) state.wave.shift();
@@ -776,23 +859,15 @@ function connect() {
       recentBreaths.unshift(data);
       if (recentBreaths.length > 40) recentBreaths.pop();
       state.todayCount++;
+      $("#mToday").textContent = state.todayCount;
       $("#mLast").innerHTML =
         `${Math.round(data.duration_ms)}<span class="unit"> ms</span>`;
       $("#mSymbol").textContent = data.symbol === "." ? "Short" : "Long";
       $("#mToday").textContent = state.todayCount;
       renderRecent();
 
-      if (calibrating) {
-        post("/api/calibration/save", {
-          label: calibrating, duration_ms: data.duration_ms, peak: data.peak,
-        }).then(() => {
-          $("#calStatus").textContent =
-            `Recorded ${calibrating} breath: ${Math.round(data.duration_ms)} ms.`;
-          calibrating = null;
-          loadCalibration();
-        });
-      }
-      if (state.exercise) exerciseBreath(data);
+      // The calibration flow consumes a breath when it is listening.
+      if (!RespCalibrate.onBreath(data) && state.exercise) exerciseBreath(data);
 
     } else if (type === "word") {
       recentWords.unshift(data);
@@ -817,6 +892,8 @@ function connect() {
   $("#mThresh").innerHTML =
     `${Math.round(s.settings.threshold_ms)}<span class="unit"> ms</span>`;
   $("#mLast").textContent = "\u2014";
+  state.todayCount = s.today || 0;
+  $("#mToday").textContent = state.todayCount;
   renderSlots("");
   renderRecent();
   renderWords();
@@ -826,7 +903,10 @@ function connect() {
   RespOnboarding.init();
   connect();
 
-  const autoGame = new URLSearchParams(location.search).get("game");
+  const params = new URLSearchParams(location.search);
+  if (params.get("cal") === "1") { show("patterns", false); RespCalibrate.open(); }
+
+  const autoGame = params.get("game");
   if (autoGame && EXERCISES[autoGame]) {
     show("training", false);
     await loadTraining();
@@ -834,7 +914,8 @@ function connect() {
   }
 
   const initial = location.hash.slice(1);
-  if (initial && ["monitor", "analytics", "training", "patterns"].includes(initial))
+  if (initial && ["monitor", "analytics", "training", "patterns", "data"]
+      .includes(initial))
     show(initial, false);
 
   addEventListener("resize", () => {

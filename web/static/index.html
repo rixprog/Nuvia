@@ -20,6 +20,7 @@
       <button data-view="analytics">Analytics</button>
       <button data-view="training">Training</button>
       <button data-view="patterns">Patterns</button>
+      <button data-view="data">Data</button>
     </nav>
 
     <div class="rail-foot">
@@ -256,19 +257,15 @@
         <div>
           <div class="card" style="margin-bottom:16px">
             <h3>Calibration</h3>
-            <p class="sub">Record your own breaths to set the short/long
-               threshold. Six of each is usually enough.</p>
-            <div class="row" style="margin-bottom:14px">
-              <button class="btn" data-cal="short">Record short breath</button>
-              <button class="btn" data-cal="long">Record long breath</button>
-            </div>
-            <div id="calStatus" class="muted" style="margin-bottom:12px"></div>
-            <div id="calList"></div>
+            <p class="sub">Nuvia learns your own short and long breaths. Redo
+               this whenever it starts misreading.</p>
+            <div id="calSummary"></div>
             <div class="row" style="margin-top:16px">
-              <button class="btn primary" id="applyCal">Apply threshold</button>
+              <button class="btn primary" id="openCal">Recalibrate</button>
               <button class="btn" id="clearCal">Clear</button>
+              <a class="btn" id="dlCal" href="/api/export/calibration.csv"
+                 download>Download CSV</a>
             </div>
-            <div id="calResult" style="margin-top:12px"></div>
           </div>
 
           <div class="card">
@@ -285,7 +282,68 @@
       </div>
     </section>
 
+    <!-- ================= DATA ================= -->
+    <section data-page="data" hidden>
+      <div class="page-head">
+        <h2>Data</h2>
+        <p>The raw stream and everything recorded, in the same forms the
+           command-line tools produce.</p>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="row" style="margin-bottom:6px">
+          <div>
+            <h3 style="margin:0">Raw stream</h3>
+            <p class="sub" style="margin:2px 0 0">Exactly what arrives over
+               Bluetooth, newest at the bottom.</p>
+          </div>
+          <div class="row" style="margin-left:auto">
+            <button class="btn" id="rawPause">Pause</button>
+            <button class="btn" id="rawHex">Hex</button>
+            <a class="btn" id="rawSave" download="raw.log">Save</a>
+          </div>
+        </div>
+        <pre class="rawbox" id="rawBox"></pre>
+      </div>
+
+      <div class="grid c2">
+        <div class="card">
+          <h3>Record a session</h3>
+          <p class="sub">Writes every sample to a CSV on disk, the same format
+             the calibration tool produces.</p>
+          <div class="row">
+            <button class="btn primary" id="recToggle">Start recording</button>
+            <span class="muted" id="recStatus"></span>
+          </div>
+          <div id="recList" style="margin-top:16px"></div>
+          <div id="replayOut" style="margin-top:14px"></div>
+        </div>
+
+        <div class="card">
+          <h3>Export</h3>
+          <p class="sub">Everything stored, as CSV.</p>
+          <div class="row">
+            <a class="btn" href="/api/export/breaths.csv" download>Breaths</a>
+            <a class="btn" href="/api/export/calibration.csv" download>Calibration</a>
+          </div>
+          <div id="exportSummary" style="margin-top:16px"></div>
+        </div>
+      </div>
+    </section>
+
   </main>
+</div>
+
+<div class="ob-overlay" id="calOverlay" hidden>
+  <div class="ob-panel cal-panel" role="dialog" aria-modal="true"
+       aria-label="Calibration">
+    <div class="ob-head">
+      <h2>Calibration</h2>
+      <div class="cal-progress" id="calProgress"></div>
+    </div>
+    <div id="calBody"></div>
+    <div class="ob-foot" id="calFoot"></div>
+  </div>
 </div>
 
 <div class="ob-overlay" id="onboarding" hidden>
@@ -309,6 +367,7 @@
 
 <div class="tip" id="tip"></div>
 <script src="/static/games.js"></script>
+<script src="/static/calibrate.js"></script>
 <script src="/static/onboarding.js"></script>
 <script src="/static/app.js"></script>
 </body>

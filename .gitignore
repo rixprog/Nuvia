@@ -19,3 +19,4 @@ __pycache__/
 breath_calibration/
 breath_calibration_archive/
 *.csv
+web/recordings/

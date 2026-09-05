@@ -166,6 +166,21 @@ invent a relationship that is not there.
 
 ![onboarding and games](docs/web-onboarding-games.png)
 
+## Everything the terminal tools do, in the browser
+
+| Terminal | In the site |
+|---|---|
+| `bluetooth_rec.py` guided calibration | **Patterns -> Recalibrate**: 6 short + 6 long, countdown, per-breath redo, and a warning when a reading contradicts its label |
+| `bluetooth_rec.py` CSV output | **Data -> Record a session**: writes every sample to a CSV in the same format |
+| `bluetooth_rec.py` threshold derivation | Applied automatically at the end of calibration, with the margin reported |
+| `breath_live.py` live decoding | **Monitor** |
+| `breath_live.py --replay` | **Data -> replay** on any recording, re-detected at the current threshold |
+| `breath_live.py --threshold` | **Patterns -> Detection settings** |
+| `breath_live.py` morse table | **Patterns -> Morse table**, all eight combinations, saved to the database |
+| `bt_read.py --raw` | **Data -> Raw stream**, with pause |
+| `bt_read.py --hex` | **Hex** toggle |
+| `bt_read.py --out` | **Save** button, plus CSV export of every stored breath |
+
 ## Setup guide
 
 A three-step guided flow runs on first visit and is reachable any time from
