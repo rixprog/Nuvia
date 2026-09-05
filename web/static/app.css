@@ -483,9 +483,11 @@ input:focus, select:focus, button:focus-visible {
 .ob-tick  { stroke: var(--ink-muted); stroke-width: 1.5; stroke-dasharray: 3 3; }
 .ob-trace { fill: none; stroke: var(--series-1); stroke-width: 2.5;
             stroke-linejoin: round; stroke-linecap: round;
-            stroke-dasharray: 620; animation: obDraw 3.2s ease-in-out infinite; }
+            stroke-dasharray: 700; animation: obDraw 3.2s ease-in-out infinite; }
 .ob-dotmark  { fill: var(--series-2); }
 .ob-dashmark { fill: var(--series-2); }
+.ob-connect  { stroke: var(--axis); stroke-width: 1.5; stroke-dasharray: 2 3; }
+.ob-span     { stroke: var(--grid); stroke-width: 1.5; }
 
 .ob-body   { transform-origin: 130px 140px; animation: obBreathe 4s ease-in-out infinite; }
 .ob-sensor { animation: obLand .9s cubic-bezier(.2,.8,.3,1) both; }
@@ -526,7 +528,7 @@ input:focus, select:focus, button:focus-visible {
   100% { opacity: 0; }
 }
 @keyframes obDraw {
-  0%   { stroke-dashoffset: 620; }
+  0%   { stroke-dashoffset: 700; }
   55%  { stroke-dashoffset: 0; }
   100% { stroke-dashoffset: 0; }
 }

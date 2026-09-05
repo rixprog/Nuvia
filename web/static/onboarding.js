@@ -69,15 +69,24 @@ function pairSVG() {
 function calibrateSVG() {
   return `
   <svg viewBox="0 0 260 210" class="ob-art" role="img"
-       aria-label="Recording short and long breaths">
-    <path d="M20 150 h30 l6 -34 6 34 h34 l10 -62 10 62 h32 l8 -22 8 22 h76"
-          class="ob-trace"/>
-    <circle cx="62" cy="116" r="6" class="ob-dotmark"/>
-    <rect x="98" y="46"  width="30" height="9" rx="4.5" class="ob-dashmark"/>
-    <text x="62"  y="182" class="ob-side">SHORT</text>
-    <text x="130" y="182" class="ob-side">LONG</text>
+       aria-label="A short breath and a long breath, and the symbol each makes">
+    <path d="M16 150 H56 L64 100 L70 97 L78 102 L84 150 H140 L148 88 H204
+             L212 150 H244" class="ob-trace"/>
+
+    <path d="M70 72 V90" class="ob-connect"/>
+    <path d="M176 72 V80" class="ob-connect"/>
+
+    <circle cx="70" cy="58" r="9" class="ob-dotmark"/>
+    <rect x="146" y="50" width="60" height="16" rx="8" class="ob-dashmark"/>
+
+    <path d="M84 158 H140" class="ob-span"/>
+    <path d="M84 154 v8 M140 154 v8" class="ob-span"/>
+
+    <text x="70"  y="182" class="ob-side">SHORT</text>
+    <text x="176" y="182" class="ob-side">LONG</text>
   </svg>`;
 }
+
 
 const OB_CONTENT = {
   pair: {
